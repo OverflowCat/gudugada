@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Octokit } from '@octokit/rest';
 import { Base64 } from 'js-base64';
-import { errorPage } from './page';
+import { CSS, errorPage } from './page';
 
 
 const app = new Hono();
@@ -23,15 +23,19 @@ async function sha256(text: string): Promise<string> {
   return hashHex;
 }
 
-app.post('/api/handle/form', async (c) => {
+app.post('/comment', async (c) => {
   const formData = await c.req.formData();
   const name = formData.get('fields[name]') as string;
-  const email = formData.get('fields[email]') as string;
+  let email = formData.get('fields[email]') as string;
+  email = await sha256(email.trim());
   let message = formData.get('fields[message]') as string;
   const slug = formData.get('options[slug]') as string;
   message = message.trim();
   if (!message) {
     return c.html(errorPage('评论不能为空'));
+  }
+  if (slug == "test" || slug == "false" || !slug) {
+    return c.html(errorPage('评论失败'));
   }
 
   const timestamp = Date.now();
@@ -40,7 +44,7 @@ app.post('/api/handle/form', async (c) => {
   const content = `---
 id: ${generateId()}
 name: ${name}
-email: ${sha256(email)}
+email: ${email}
 date: ${date}
 ---
 ${message}`;
@@ -86,18 +90,20 @@ ${message}`;
       body: `New comment on ${slug}`
     });
 
-    // Return HTML response with success message and redirect to PR
     return c.html(`
     <html>
       <head>
         <meta http-equiv="refresh" content="5;url=${pullRequest.data.html_url}">
         <title>成功</title>
+        <style>${CSS}</style>
       </head>
       <body>
-        <h1>提交成功！</h1>
-        <p>您的评论已成功提交，并将在审核后显示。</p>
-        <p>您将被重定向到生成的 Pull Request 页面。</p>
-        <p><a href="${pullRequest.data.html_url}">如果没有自动重定向，请点击这里。</a></p>
+        <main>
+          <h1>提交成功！</h1>
+          <p>您的评论已成功提交，并将在审核后显示。</p>
+          <p>您将被重定向到生成的 Pull Request 页面。</p>
+          <p><a href="${pullRequest.data.html_url}">如果没有自动重定向，请点击这里。</a></p>
+        </main>
       </body>
     </html>
   `);
