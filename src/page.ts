@@ -48,6 +48,7 @@ export function errorPage(c: any) {
       <body>
         <main>
           <h1>提交失败！</h1>
+          <p>原因：</p>
           <p>${c}</p>
         </main>
       </body>

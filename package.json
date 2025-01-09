@@ -11,6 +11,7 @@
     "js-base64": "^3.7.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@cloudflare/workers-types": "^4.20241218.0",
     "wrangler": "^3.96.0"
   }
