@@ -38,6 +38,7 @@ a:hover {
 }
 `
 
+// biome-ignore lint/suspicious/noExplicitAny: <Maybe error>
 export function errorPage(c: any) {
   return `
     <html>

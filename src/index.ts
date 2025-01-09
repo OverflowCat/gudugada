@@ -1,10 +1,14 @@
-import { Hono } from "hono";
+import { type Env, Hono } from "hono";
 import { Octokit } from "@octokit/rest";
 import { Base64 } from "js-base64";
 import { CSS, errorPage } from "./page";
 import { formatFrontmatter } from "./format";
 
-const app = new Hono();
+type Bindings = {
+  DB: D1Database;
+};
+
+const app = new Hono<{ Bindings: Bindings }>();
 
 function generateId(length = 24) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -26,10 +30,18 @@ async function sha256(text: string): Promise<string> {
 
 app.post("/comment", async (c) => {
   const formData = await c.req.formData();
+
   const name = formData.get("user[name]") as string;
   let email = formData.get("user[email]");
   let message = formData.get("message") as string;
+  const captcha = formData.get("captcha") as string;
+  console.info("captcha", captcha);
+  console.info("email", email);
+  console.info("message", message);
+  console.info("name", name);
+
   const slug = formData.get("slug") as string;
+  console.info("slug", slug);
   message = message.trim();
   const reasons = [];
   if (!message || typeof message !== "string") {
@@ -53,7 +65,6 @@ app.post("/comment", async (c) => {
   ) {
     return c.html(errorPage("数据格式错误"));
   }
-  if (email) email = await sha256(email.trim());
 
   const timestamp = Date.now();
   const date = new Date(timestamp).toISOString();
@@ -63,24 +74,36 @@ app.post("/comment", async (c) => {
     name,
     url,
     date,
-    message,
   };
   if (typeof email === "string" && email.length > 0) data.email = email;
-
-  const content = `---
-${formatFrontmatter(data)}
----
-${message}`;
 
   const filePath = `src/comments/${slug}/entry${timestamp}.md`;
   const branch = `comment/${timestamp}`;
 
   const octokit = new Octokit({
-    auth: (c.env as Record<string, string>).GITHUB_TOKEN,
+    // @ts-ignore
+    auth: c.env.GITHUB_TOKEN,
   });
+
+  // SQL
+  const db = c.env.DB;
 
   // Create a new branch
   try {
+    const comments = db.prepare(
+      "INSERT INTO comments (name, url, email, message, slug, timestamp, pr_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'));",
+    );
+    const resp1 = comments
+      .bind(name, url, email, message, slug, timestamp, 0)
+      .run();
+    console.info("INSERT resp", resp1);
+
+    if (email) email = await sha256(email.trim());
+
+    const content = `---
+  ${formatFrontmatter(data)}
+  ---
+  ${message}`;
     const srcRef = await octokit.git.getRef({
       owner: "OverflowCat",
       repo: "blog",
@@ -112,6 +135,14 @@ ${message}`;
       base: "src",
       body: `New comment on ${slug}`,
     });
+
+    const pr_number = pullRequest.data.number;
+    // Update comments table
+    const comments2 = db.prepare(
+      "UPDATE comments SET pr_number = ? WHERE id = ?",
+    );
+    const resp = await comments2.bind(pr_number, data.id).run();
+    console.info("UPDATE resp", resp);
 
     return c.html(`
     <html>
