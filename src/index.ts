@@ -103,7 +103,9 @@ app.post("/comment", async (c) => {
     const content = `---
   ${formatFrontmatter(data)}
   ---
-  ${message}`;
+
+  ${message}
+`;
     const srcRef = await octokit.git.getRef({
       owner: "OverflowCat",
       repo: "blog",
